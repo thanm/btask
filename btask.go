@@ -154,6 +154,9 @@ func (tm *TaskMon) monitorSigChan() {
 	fmt.Fprintf(os.Stderr, "** received signal %v\n", s)
 	fmt.Fprintf(os.Stderr, "** killing subtasks...\n")
 	for _, t := range tm.tasks {
+		if t.Cmd == nil {
+			continue
+		}
 		t.Cmd.Process.Signal(syscall.SIGINT)
 	}
 	fmt.Fprintf(os.Stderr, "** ... done.\n")
@@ -496,6 +499,7 @@ func (t *Task) RunCommand(tm *TaskMon) int {
 		os.Stderr.Write(b)
 		err = xerr
 	}
+	t.Cmd = nil
 	returnst := 0
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: task %d '%s' failed with error: %v\n", t.Id, t.Name, err)
