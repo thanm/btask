@@ -10,7 +10,9 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -50,9 +52,10 @@ type DepChan chan IdStat
 // execute and wait for, plus a set of dependencies expressed as channels.
 
 type Task struct {
-	Id           int      // unique task id
-	Name         string   // name (ex: "benchprep gollvm")
-	Command      []string // command to execute
+	Id           int       // unique task id
+	Name         string    // name (ex: "benchprep gollvm")
+	Command      []string  // command to execute
+	Cmd          *exec.Cmd // command returned from os.Command
 	MonChan      DepChan
 	NumIn        int
 	InDeps       DepChan
@@ -84,6 +87,7 @@ type TaskMon struct {
 	taskByName    map[string]*Task
 	taskByChan    map[DepChan]*Task
 	monChan       chan IdStat
+	sigChan       chan os.Signal
 	tempfiles     []*os.File
 	perfqueue     []*Task
 	indeps        map[int]int
@@ -96,6 +100,9 @@ func MakeTaskMon() *TaskMon {
 	m.taskByName = make(map[string]*Task)
 	m.taskByChan = make(map[DepChan]*Task)
 	m.monChan = make(DepChan, 1000)
+	m.sigChan = make(chan os.Signal, 1)
+	signal.Notify(m.sigChan, os.Interrupt)
+	go m.monitorSigChan()
 	m.tempfiles = []*os.File{}
 	m.perfqueue = []*Task{}
 	m.indeps = make(map[int]int)
@@ -140,6 +147,16 @@ func TempContents(tn string) string {
 	}
 	f.Close()
 	return sb.String()
+}
+
+func (tm *TaskMon) monitorSigChan() {
+	s := <-tm.sigChan
+	fmt.Fprintf(os.Stderr, "** received signal %v\n", s)
+	fmt.Fprintf(os.Stderr, "** killing subtasks...\n")
+	for _, t := range tm.tasks {
+		t.Cmd.Process.Signal(syscall.SIGINT)
+	}
+	fmt.Fprintf(os.Stderr, "** ... done.\n")
 }
 
 func (tm *TaskMon) DumpGraph(fn string) {
@@ -467,6 +484,7 @@ func (t *Task) RunCommand(tm *TaskMon) int {
 	}
 	xverb(1, "task %d '%s' running: %s", t.Id, t.Name, strings.Join(t.Command, " "))
 	cmd := exec.Command(t.Command[0], t.Command[1:]...)
+	t.Cmd = cmd
 	var err error
 	if erroutf != nil {
 		cmd.Stdout = erroutf

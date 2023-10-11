@@ -5,7 +5,9 @@
 package btask
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -40,6 +42,31 @@ func TestCycleDetection(t *testing.T) {
 		t.Errorf("expected cycle, didn't detect")
 	}
 	t.Logf("expected cycle error is %v\n", err)
+	tm.Destroy()
+}
+
+func TestInterruptHandling(t *testing.T) {
+	if os.Getenv("HAND_TEST_SIGNAL_HANDLING") == "" {
+		t.Skip("only for hand testing")
+	}
+
+	tm := MakeTaskMon()
+	var sb strings.Builder
+	sb.WriteString("#!/bin/sh\n")
+	sb.WriteString("function handle() {\n")
+	sb.WriteString("  echo signal caught\n")
+	sb.WriteString("  echo foo > /tmp/token.txt\n")
+	sb.WriteString("  exit 0\n")
+	sb.WriteString("}\n")
+	sb.WriteString("trap handle SIGINT\n")
+	sb.WriteString("sleep 30\n")
+	sb.WriteString("exit 1\n")
+	sts := TaskSetup{Name: "A", Command: sb.String()}
+	tm.MakeShellTask(sts)
+	_, _, err := tm.Kickoff()
+	if err != nil {
+		t.Errorf("error from kickoff: %v", err)
+	}
 	tm.Destroy()
 }
 
