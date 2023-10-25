@@ -1,3 +1,3 @@
 module github.com/thanm/btask
 
-go 1.22
+go 1.19
