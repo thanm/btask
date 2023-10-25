@@ -45,6 +45,39 @@ func TestCycleDetection(t *testing.T) {
 	tm.Destroy()
 }
 
+func TestSoft(t *testing.T) {
+	tm := MakeTaskMon()
+
+	sts := TaskSetup{
+		Name:    "A",
+		Command: "echo GOOD ; exec /bin/true",
+	}
+	st1 := tm.MakeShellTask(sts)
+
+	sts.Name = "B"
+	sts.Command = "echo BAD ; exec /bin/false"
+	st2 := tm.MakeShellTask(sts)
+	st2.Soft = true
+
+	sts.Name = "C"
+	sts.Command = "echo GOOD ; exec /bin/true"
+	st3 := tm.MakeShellTask(sts)
+
+	st2.MarkDep(st1)
+	st3.MarkDep(st2)
+
+	nf, nr, err := tm.Kickoff()
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if nf != 1 {
+		t.Errorf("expected 1 failure got %d", nf)
+	}
+	if nr != 0 {
+		t.Errorf("expected 0 notrun got %d", nr)
+	}
+}
+
 func TestInterruptHandling(t *testing.T) {
 	if os.Getenv("HAND_TEST_SIGNAL_HANDLING") == "" {
 		t.Skip("only for hand testing")

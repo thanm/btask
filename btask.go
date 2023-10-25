@@ -61,6 +61,7 @@ type Task struct {
 	InDeps       DepChan
 	OutDeps      []DepChan
 	PerfCritical bool // performance critical command, run in isolation
+	Soft         bool // failure doesn't kill dependent tasks
 	ErrOutFile   string
 	ShellTF      *os.File
 	Duration     int // running time in milliseconds
@@ -522,7 +523,10 @@ func (t *Task) Run(tm *TaskMon) {
 	for i := 0; i < t.NumIn; i++ {
 		st := <-t.InDeps
 		if st.Status != 0 {
-			infail = true
+			predtask := tm.tasks[st.Id-1]
+			if !predtask.Soft {
+				infail = true
+			}
 		}
 	}
 
